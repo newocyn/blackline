@@ -3,6 +3,8 @@ package online.pcguys.objectrecognizer
 import android.Manifest
 import android.app.AlertDialog
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -18,8 +20,8 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageProxy
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -28,19 +30,22 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabel
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
+import com.google.mlkit.vision.objects.ObjectDetection
+import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : AppCompatActivity() {
     private lateinit var previewView: PreviewView
     private lateinit var resultText: TextView
     private lateinit var feedbackRow: LinearLayout
+    private lateinit var identifyButton: Button
     private lateinit var cameraExecutor: ExecutorService
-    private val scanRequested = AtomicBoolean(false)
+    private var imageCapture: ImageCapture? = null
     private var currentSignature = ""
     private var currentPrediction = ""
 
@@ -64,11 +69,11 @@ class MainActivity : AppCompatActivity() {
         root.addView(TargetView(), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
 
         val top = TextView(this).apply {
-            text = "PCG OBJECT RECOGNIZER\nPlace one object inside the target"
+            text = "PCG OBJECT RECOGNIZER\nCrosshair selects the object. Only the box is analyzed."
             setTextColor(Color.WHITE)
-            textSize = 18f
+            textSize = 17f
             gravity = Gravity.CENTER
-            setPadding(dp(24), dp(24), dp(24), dp(24))
+            setPadding(dp(18), dp(20), dp(18), dp(20))
             setBackgroundColor(0xAA000000.toInt())
         }
         root.addView(top, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
@@ -102,18 +107,14 @@ class MainActivity : AppCompatActivity() {
         feedbackRow.addView(yes, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(6) })
         feedbackRow.addView(no, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(6) })
 
-        val identify = Button(this).apply {
+        identifyButton = Button(this).apply {
             text = "IDENTIFY OBJECT"
             textSize = 18f
-            setOnClickListener {
-                feedbackRow.visibility = View.GONE
-                resultText.text = "Analyzing shape, labels and visible text…"
-                scanRequested.set(true)
-            }
+            setOnClickListener { captureTarget() }
         }
         bottom.addView(resultText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         bottom.addView(feedbackRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        bottom.addView(identify, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
+        bottom.addView(identifyButton, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(8) })
         root.addView(bottom, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         setContentView(root)
     }
@@ -123,82 +124,155 @@ class MainActivity : AppCompatActivity() {
         providerFuture.addListener({
             val provider = providerFuture.get()
             val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
-            val analysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            imageCapture = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
-                .also { it.setAnalyzer(cameraExecutor) { image -> analyze(image) } }
             try {
                 provider.unbindAll()
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture)
             } catch (e: Exception) {
                 resultText.text = "Unable to start camera: ${e.message}"
             }
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun analyze(proxy: ImageProxy) {
-        if (!scanRequested.compareAndSet(true, false)) {
-            proxy.close()
-            return
-        }
-        val mediaImage = proxy.image
-        if (mediaImage == null) {
-            proxy.close()
-            return
-        }
-        val input = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
-        val labeler = ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(0.25f).build())
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    private fun captureTarget() {
+        val capture = imageCapture ?: return
+        feedbackRow.visibility = View.GONE
+        identifyButton.isEnabled = false
+        resultText.text = "Capturing only the target area…"
+        val file = File.createTempFile("pcg_target_", ".jpg", cacheDir)
+        val output = ImageCapture.OutputFileOptions.Builder(file).build()
+        capture.takePicture(output, cameraExecutor, object : ImageCapture.OnImageSavedCallback {
+            override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                try {
+                    val full = BitmapFactory.decodeFile(file.absolutePath)
+                    val roi = cropTargetRegion(full)
+                    isolateCrosshairObject(roi)
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        resultText.text = "Could not analyze image. Try again."
+                        identifyButton.isEnabled = true
+                    }
+                } finally {
+                    file.delete()
+                }
+            }
 
+            override fun onError(exception: ImageCaptureException) {
+                runOnUiThread {
+                    resultText.text = "Capture failed. Try again."
+                    identifyButton.isEnabled = true
+                }
+                file.delete()
+            }
+        })
+    }
+
+    private fun cropTargetRegion(bitmap: Bitmap): Bitmap {
+        val left = (bitmap.width * 0.14f).toInt().coerceAtLeast(0)
+        val top = (bitmap.height * 0.22f).toInt().coerceAtLeast(0)
+        val width = (bitmap.width * 0.72f).toInt().coerceAtMost(bitmap.width - left)
+        val height = (bitmap.height * 0.38f).toInt().coerceAtMost(bitmap.height - top)
+        return Bitmap.createBitmap(bitmap, left, top, width, height)
+    }
+
+    private fun isolateCrosshairObject(roi: Bitmap) {
+        val options = ObjectDetectorOptions.Builder()
+            .setDetectorMode(ObjectDetectorOptions.SINGLE_IMAGE_MODE)
+            .enableMultipleObjects()
+            .enableClassification()
+            .build()
+        val detector = ObjectDetection.getClient(options)
+        detector.process(InputImage.fromBitmap(roi, 0))
+            .addOnSuccessListener { objects ->
+                val cx = roi.width / 2f
+                val cy = roi.height / 2f
+                val selected = objects
+                    .filter { it.boundingBox.contains(cx.toInt(), cy.toInt()) }
+                    .minByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+                    ?: objects.minByOrNull {
+                        val bx = it.boundingBox.exactCenterX()
+                        val by = it.boundingBox.exactCenterY()
+                        ((bx - cx) * (bx - cx) + (by - cy) * (by - cy)).toInt()
+                    }
+
+                val focused = if (selected != null) {
+                    val box = selected.boundingBox
+                    val padX = (box.width() * 0.12f).toInt()
+                    val padY = (box.height() * 0.12f).toInt()
+                    val left = (box.left - padX).coerceAtLeast(0)
+                    val top = (box.top - padY).coerceAtLeast(0)
+                    val right = (box.right + padX).coerceAtMost(roi.width)
+                    val bottom = (box.bottom + padY).coerceAtMost(roi.height)
+                    val areaRatio = ((right - left) * (bottom - top)).toFloat() / (roi.width * roi.height).toFloat()
+                    if (right > left && bottom > top && areaRatio < 0.92f) {
+                        Bitmap.createBitmap(roi, left, top, right - left, bottom - top)
+                    } else roi
+                } else roi
+                analyzeFocusedBitmap(focused)
+            }
+            .addOnFailureListener { analyzeFocusedBitmap(roi) }
+    }
+
+    private fun analyzeFocusedBitmap(bitmap: Bitmap) {
+        val input = InputImage.fromBitmap(bitmap, 0)
+        val labeler = ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(0.18f).build())
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         labeler.process(input)
             .addOnSuccessListener { labels ->
                 recognizer.process(input)
                     .addOnSuccessListener { text -> showResult(labels, text.text) }
                     .addOnFailureListener { showResult(labels, "") }
-                    .addOnCompleteListener { proxy.close() }
             }
             .addOnFailureListener {
-                resultText.text = "Recognition failed. Hold the object inside the target and try again."
-                proxy.close()
+                runOnUiThread {
+                    resultText.text = "Recognition failed. Fill the target with one object and try again."
+                    identifyButton.isEnabled = true
+                }
             }
     }
 
     private fun showResult(labels: List<ImageLabel>, detectedText: String) {
+        val ignored = setOf("hand", "finger", "person", "skin", "arm", "gesture", "human body", "room", "indoor")
         val filtered = labels
-            .filterNot { it.text.equals("hand", true) || it.text.equals("finger", true) || it.text.equals("person", true) }
+            .filterNot { ignored.contains(it.text.lowercase(Locale.US)) }
             .sortedByDescending { it.confidence }
-            .take(6)
-        val fallback = labels.sortedByDescending { it.confidence }.take(6)
+            .take(8)
+        val fallback = labels.sortedByDescending { it.confidence }.take(8)
         val candidates = if (filtered.isNotEmpty()) filtered else fallback
         val words = detectedText
             .replace("\n", " ")
             .split(Regex("\\s+"))
-            .map { it.trim().lowercase(Locale.US) }
-            .filter { it.length >= 3 }
+            .map { it.trim().lowercase(Locale.US).replace(Regex("[^a-z0-9-]"), "") }
+            .filter { it.length >= 2 }
             .distinct()
-            .take(8)
+            .take(12)
         currentSignature = buildSignature(candidates, words)
         val learned = getSharedPreferences("recognizer_learning", MODE_PRIVATE).getString("correction_$currentSignature", null)
         currentPrediction = learned ?: candidates.firstOrNull()?.text.orEmpty()
 
-        resultText.text = if (currentPrediction.isBlank()) {
-            "Not sure what this is. Move closer, fill the target and try again."
-        } else {
-            buildString {
-                append(if (learned != null) "Learned identification: " else "Likely: ")
-                append(currentPrediction)
-                candidates.firstOrNull()?.let { append("\nConfidence: ${(it.confidence * 100).toInt()}%") }
-                if (words.isNotEmpty()) append("\nVisible text: ${words.joinToString(", ")}")
-                val alternatives = candidates.map { it.text }.filterNot { it.equals(currentPrediction, true) }.distinct().take(4)
-                if (alternatives.isNotEmpty()) append("\nOther matches: ${alternatives.joinToString(", ")}")
+        runOnUiThread {
+            resultText.text = if (currentPrediction.isBlank()) {
+                "Not sure what this is. Move closer and keep the object centered on the crosshair."
+            } else {
+                buildString {
+                    append(if (learned != null) "Learned identification: " else "Likely: ")
+                    append(currentPrediction)
+                    candidates.firstOrNull()?.let { append("\nConfidence: ${(it.confidence * 100).toInt()}%") }
+                    if (words.isNotEmpty()) append("\nVisible text: ${words.joinToString(", ")}")
+                    val alternatives = candidates.map { it.text }.filterNot { it.equals(currentPrediction, true) }.distinct().take(5)
+                    if (alternatives.isNotEmpty()) append("\nOther matches: ${alternatives.joinToString(", ")}")
+                }
             }
+            feedbackRow.visibility = if (currentPrediction.isBlank()) View.GONE else View.VISIBLE
+            identifyButton.isEnabled = true
         }
-        feedbackRow.visibility = if (currentPrediction.isBlank()) View.GONE else View.VISIBLE
     }
 
     private fun buildSignature(labels: List<ImageLabel>, words: List<String>): String {
-        val labelPart = labels.take(4).joinToString("|") { it.text.lowercase(Locale.US) }
-        val textPart = words.take(5).joinToString("|")
+        val labelPart = labels.take(5).joinToString("|") { it.text.lowercase(Locale.US) }
+        val textPart = words.take(8).joinToString("|")
         return "$labelPart::$textPart".hashCode().toString()
     }
 
@@ -238,20 +312,28 @@ class MainActivity : AppCompatActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private inner class TargetView : View(this) {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
             strokeWidth = dp(3).toFloat()
         }
+        private val shadePaint = Paint().apply { color = 0x77000000 }
+
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
             val w = width * 0.72f
             val h = height * 0.38f
             val left = (width - w) / 2f
             val top = height * 0.22f
-            canvas.drawRoundRect(left, top, left + w, top + h, dp(18).toFloat(), dp(18).toFloat(), paint)
-            canvas.drawLine(width / 2f - dp(18), top + h / 2f, width / 2f + dp(18), top + h / 2f, paint)
-            canvas.drawLine(width / 2f, top + h / 2f - dp(18), width / 2f, top + h / 2f + dp(18), paint)
+            val right = left + w
+            val bottom = top + h
+            canvas.drawRect(0f, 0f, width.toFloat(), top, shadePaint)
+            canvas.drawRect(0f, bottom, width.toFloat(), height.toFloat(), shadePaint)
+            canvas.drawRect(0f, top, left, bottom, shadePaint)
+            canvas.drawRect(right, top, width.toFloat(), bottom, shadePaint)
+            canvas.drawRoundRect(left, top, right, bottom, dp(18).toFloat(), dp(18).toFloat(), borderPaint)
+            canvas.drawLine(width / 2f - dp(18), top + h / 2f, width / 2f + dp(18), top + h / 2f, borderPaint)
+            canvas.drawLine(width / 2f, top + h / 2f - dp(18), width / 2f, top + h / 2f + dp(18), borderPaint)
         }
     }
 
