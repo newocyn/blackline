@@ -14,5 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PCG Object Recognizer"
+rootProject.name = "PCG Mobile Tools"
 include(":app")
+include(":wifi_mapper")
