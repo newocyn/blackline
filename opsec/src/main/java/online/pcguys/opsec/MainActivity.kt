@@ -207,7 +207,7 @@ class MainActivity : AppCompatActivity() {
             status.text = "Could not read that image."
             return
         }
-        var working = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+        val working = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         processFaces(working) { faceBitmap ->
             processCodes(faceBitmap) { codeBitmap ->
                 processSensitiveText(codeBitmap) { finalBitmap ->
@@ -362,20 +362,21 @@ class MainActivity : AppCompatActivity() {
             append("USB debugging        ${if (adb) "Enabled" else "Off"}\n")
             append("Accessibility        $accessibility enabled service${if (accessibility == 1) "" else "s"}")
         }
-        findViewByTag<ViewGroup>("privacy_status")?.let { }
-        val root = window.decorView
-        val target = findTaggedText(root, "privacy_status")
+        val target = findTaggedText(window.decorView, "privacy_status")
         target?.text = text
         status.text = "Privacy status refreshed."
     }
 
     private fun findTaggedText(view: View, tag: String): TextView? {
         if (view is TextView && view.tag == tag) return view
-        if (view is ViewGroup) for (i in 0 until view.childCount) findTaggedText(view.getChildAt(i), tag)?.let { return it }
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                val found = findTaggedText(view.getChildAt(i), tag)
+                if (found != null) return found
+            }
+        }
         return null
     }
-
-    private fun <T : View> findViewByTag(tag: String): T? = findViewById(android.R.id.content).findViewWithTag(tag)
 
     private fun confirmPanic() {
         AlertDialog.Builder(this)
