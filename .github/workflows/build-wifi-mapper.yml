@@ -1,0 +1,32 @@
+name: Build PCG WiFi Mapper APK
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "wifi_mapper/**"
+      - "settings.gradle.kts"
+      - ".github/workflows/build-wifi-mapper.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build WiFi Mapper debug APK
+        run: gradle :wifi_mapper:assembleDebug
+      - name: Rename APK
+        run: cp wifi_mapper/build/outputs/apk/debug/wifi_mapper-debug.apk PCG-WiFi-Mapper-v1.0.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PCG-WiFi-Mapper-APK
+          path: PCG-WiFi-Mapper-v1.0.apk
+          if-no-files-found: error
