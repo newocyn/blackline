@@ -11,7 +11,6 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
-import android.net.wifi.WifiManager
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -161,7 +160,7 @@ class MainActivity : AppCompatActivity() {
             setHintTextColor(Color.rgb(95,100,105))
             setTextColor(Color.WHITE)
             textSize = 15f
-            singleLine = true
+            setSingleLine(true)
             setPadding(dp(16), 0, dp(16), 0)
             background = rounded(panel, 16f, Color.rgb(45,48,52), 1)
             setOnEditorActionListener { _, _, _ ->
@@ -252,7 +251,7 @@ class MainActivity : AppCompatActivity() {
         main.addView(pageHeader("APPLICATION MATRIX", "${apps.size} LAUNCHABLE APPS"))
         val search = EditText(this).apply {
             hint = "FILTER APPS"
-            setHintTextColor(Color.rgb(95,100,105)); setTextColor(Color.WHITE); textSize = 15f; singleLine = true
+            setHintTextColor(Color.rgb(95,100,105)); setTextColor(Color.WHITE); textSize = 15f; setSingleLine(true)
             setPadding(dp(16), 0, dp(16), 0); background = rounded(panel, 16f, Color.rgb(45,48,52), 1)
             setText(initial)
         }
@@ -326,7 +325,7 @@ class MainActivity : AppCompatActivity() {
         ), marginTop(14))
         body.addView(controlSection("SYSTEM ENTRY POINTS",
             settingButton("Default apps") { openSettings(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS) },
-            settingButton("Notifications") { openSettings(Settings.ACTION_NOTIFICATION_SETTINGS) },
+            settingButton("Notifications") { openSettings("android.settings.NOTIFICATION_SETTINGS") },
             settingButton("Permissions") { openSettings(Settings.ACTION_APPLICATION_SETTINGS) },
             settingButton("Accessibility") { openSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS) },
             settingButton("Developer options") { openSettings(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS) }
