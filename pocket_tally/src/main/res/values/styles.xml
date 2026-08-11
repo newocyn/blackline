@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.PocketTally" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#080808</item>
+        <item name="android:navigationBarColor">#080808</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">#F5F5F0</item>
+        <item name="colorAccent">#F5F5F0</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

@@ -1,0 +1,48 @@
+name: Build Pocket Tally APK
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "pocket_tally/**"
+      - "settings.gradle.kts"
+      - "build.gradle.kts"
+      - ".github/workflows/build-pocket-tally.yml"
+  pull_request:
+    paths:
+      - "pocket_tally/**"
+      - "settings.gradle.kts"
+      - "build.gradle.kts"
+      - ".github/workflows/build-pocket-tally.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Lint and build Pocket Tally
+        run: gradle :pocket_tally:lintDebug :pocket_tally:testDebugUnitTest :pocket_tally:assembleDebug :pocket_tally:bundleRelease
+      - name: Prepare distributable artifacts
+        run: |
+          cp pocket_tally/build/outputs/apk/debug/pocket_tally-debug.apk Pocket-Tally-v1.0.0-debug.apk
+          cp pocket_tally/build/outputs/bundle/release/pocket_tally-release.aab Pocket-Tally-v1.0.0-unsigned.aab
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pocket-Tally-v1.0.0
+          path: |
+            Pocket-Tally-v1.0.0-debug.apk
+            Pocket-Tally-v1.0.0-unsigned.aab
+            pocket_tally/build/reports/lint-results-debug.html
+          if-no-files-found: error
+          retention-days: 14
