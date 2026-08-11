@@ -18,3 +18,4 @@ rootProject.name = "PCG Mobile Tools"
 include(":app")
 include(":wifi_mapper")
 include(":opsec")
+include(":pcg_launcher")
