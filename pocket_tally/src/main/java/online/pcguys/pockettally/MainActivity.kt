@@ -30,6 +30,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -93,6 +94,17 @@ class MainActivity : AppCompatActivity() {
         window.statusBarColor = background
         window.navigationBarColor = background
         handleIntent(intent)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (screen != Screen.COUNTERS) {
+                    screen = Screen.COUNTERS
+                    render()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
         applyWindowSettings()
         render()
         maybeShowOnboarding()
@@ -109,16 +121,6 @@ class MainActivity : AppCompatActivity() {
         tone?.release()
         tone = null
         super.onDestroy()
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        if (screen != Screen.COUNTERS) {
-            screen = Screen.COUNTERS
-            render()
-        } else {
-            super.onBackPressed()
-        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
