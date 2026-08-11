@@ -21,6 +21,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Apply launcher compatibility fixes
+        run: |
+          sed -i 's/singleLine = true/setSingleLine(true)/g' pcg_launcher/src/main/java/online/pcguys/launcher/MainActivity.kt
+          sed -i 's/Settings.ACTION_NOTIFICATION_SETTINGS/"android.settings.NOTIFICATION_SETTINGS"/g' pcg_launcher/src/main/java/online/pcguys/launcher/MainActivity.kt
       - name: Build launcher debug APK
         run: gradle :pcg_launcher:assembleDebug
       - name: Rename APK
