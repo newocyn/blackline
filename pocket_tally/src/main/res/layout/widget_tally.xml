@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_background">
+
+    <TextView
+        android:id="@+id/widget_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="QUICK TALLY"
+        android:textColor="#A0A09A"
+        android:textSize="11sp"
+        android:letterSpacing="0.12"
+        android:maxLines="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_value"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="0"
+            android:textColor="#F5F5F0"
+            android:textSize="38sp"
+            android:textStyle="bold"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/widget_minus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginEnd="8dp"
+            android:gravity="center"
+            android:background="@drawable/widget_button"
+            android:text="−"
+            android:textColor="#080808"
+            android:textSize="24sp"
+            android:contentDescription="Decrease counter" />
+
+        <TextView
+            android:id="@+id/widget_plus"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:background="@drawable/widget_button"
+            android:text="+"
+            android:textColor="#080808"
+            android:textSize="24sp"
+            android:contentDescription="Increase counter" />
+    </LinearLayout>
+</LinearLayout>

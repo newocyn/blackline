@@ -20,7 +20,7 @@ jobs:
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.13'
       - name: Build WiFi Mapper debug APK
         run: gradle :wifi_mapper:assembleDebug
       - name: Rename APK
