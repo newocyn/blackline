@@ -1,0 +1,55 @@
+name: Rebrand Recall APK
+
+on:
+  push:
+    branches:
+      - agent/recall-v1
+    paths:
+      - '.github/workflows/rebrand-recall-apk.yml'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download verified public APK and packaging tool
+        run: |
+          curl -L --fail --retry 3 -o base.apk https://github.com/Alfio010/notification-listener-android/releases/download/v2.7.3/notifications-recovery-2.7.3.apk
+          echo '2e78bd8b2e839a62712b9b686ef242d1b2623a6541f342cec285dca0e0da2084  base.apk' | sha256sum -c -
+          curl -L --fail --retry 3 -o apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar
+          echo 'eee4669a704a14e0623407e6701b0b91887e61e1e4049cb7a82833e14ae8b5fd  apktool.jar' | sha256sum -c -
+
+      - name: Decode and apply Recall branding
+        run: |
+          java -jar apktool.jar d -f base.apk -o decoded
+          sed -i 's/>Notifications Recovery</>Recall</g' decoded/res/values/strings.xml
+          grep -q '>Recall<' decoded/res/values/strings.xml
+
+      - name: Rebuild APK
+        run: java -jar apktool.jar b decoded -o Recall-unsigned.apk
+
+      - name: Align and sign APK
+        run: |
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/zipalign" -f -p 4 Recall-unsigned.apk Recall-aligned.apk
+          keytool -genkeypair -v -keystore recall-build.jks -storepass recallbuild -keypass recallbuild -alias recall -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Recall Build, OU=Android, O=PCG, L=Owosso, ST=Michigan, C=US'
+          "$BUILD_TOOLS/apksigner" sign --ks recall-build.jks --ks-pass pass:recallbuild --key-pass pass:recallbuild --out Recall-v1.0.0.apk Recall-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose Recall-v1.0.0.apk
+          "$BUILD_TOOLS/aapt2" dump badging Recall-v1.0.0.apk | head -10
+          sha256sum Recall-v1.0.0.apk > Recall-v1.0.0.sha256
+
+      - name: Upload Recall APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Recall-v1.0.0-Branded-APK
+          path: |
+            Recall-v1.0.0.apk
+            Recall-v1.0.0.sha256
+          if-no-files-found: error
+          retention-days: 30
