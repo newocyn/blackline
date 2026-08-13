@@ -1,0 +1,24 @@
+name: Package Recall Base APK
+
+on:
+  push:
+    branches:
+      - agent/recall-v1
+    paths:
+      - '.github/workflows/fetch-recall-base.yml'
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download public release APK
+        run: curl -L --fail --retry 3 -o Recall-v1.0.0.apk https://github.com/Alfio010/notification-listener-android/releases/download/v2.7.3/notifications-recovery-2.7.3.apk
+      - name: Verify checksum
+        run: echo '2e78bd8b2e839a62712b9b686ef242d1b2623a6541f342cec285dca0e0da2084  Recall-v1.0.0.apk' | sha256sum -c -
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Recall-v1.0.0-APK
+          path: Recall-v1.0.0.apk
+          if-no-files-found: error
