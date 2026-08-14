@@ -24,7 +24,9 @@ jobs:
       - name: Decode and locate target bytecode
         run: |
           java -jar apktool.jar d -f base.apk -o decoded >/dev/null
-          echo '===== Recording preference key matches ====='
-          grep -R -n -B12 -A20 'isRecordNotificationEnabled' decoded/smali* || true
-          echo '===== Auth text / biometric matches ====='
-          grep -R -n -B18 -A45 'BIOMETRIC_STRONG\|canAuthenticate\|authNoEnrolled\|isDeviceSecure' decoded/smali* | head -500 || true
+          echo '===== Notification listener recording check ====='
+          sed -n '485,540p' decoded/smali/com/android/alftendev/services/NotificationListenerServiceImpl.smali
+          echo '===== Auth setting region ====='
+          grep -n -B40 -A100 'isAuthEnabled' decoded/smali/com/android/alftendev/activities/home/SettingsActivity\$a.smali | head -260 || true
+          echo '===== Candidate auth helper resource references ====='
+          grep -R -n -B35 -A80 '0x7f110017\|0x7f110018\|0x7f110019\|0x7f11001a' decoded/smali* | head -500 || true
