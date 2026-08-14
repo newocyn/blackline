@@ -1,0 +1,98 @@
+name: Build Recall v1.0.1
+
+on:
+  push:
+    branches: ["agent/recall-v1"]
+    paths:
+      - ".github/workflows/build-recall-v101.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download verified base APK and apktool
+        run: |
+          curl -L --fail --retry 3 -o base.apk https://github.com/Alfio010/notification-listener-android/releases/download/v2.7.3/notifications-recovery-2.7.3.apk
+          echo '2e78bd8b2e839a62712b9b686ef242d1b2623a6541f342cec285dca0e0da2084  base.apk' | sha256sum -c -
+          curl -L --fail --retry 3 -o apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar
+          echo 'eee4669a704a14e0623407e6701b0b91887e61e1e4049cb7a82833e14ae8b5fd  apktool.jar' | sha256sum -c -
+
+      - name: Decode and patch Recall
+        run: |
+          java -jar apktool.jar d -f base.apk -o decoded
+          sed -i 's/>Notifications Recovery</>Recall</g' decoded/res/values/strings.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # Make notification recording default ON wherever the recording preference is read.
+          targets = [
+              Path('decoded/smali/com/android/alftendev/services/NotificationListenerServiceImpl.smali'),
+              Path('decoded/smali/com/android/alftendev/activities/home/SettingsActivity$a.smali'),
+          ]
+          key = 'isRecordNotificationEnabled'
+          changed = 0
+          for path in targets:
+              lines = path.read_text().splitlines()
+              for i, line in enumerate(lines):
+                  if key not in line:
+                      continue
+                  for j in range(i + 1, min(i + 45, len(lines))):
+                      if 'getBoolean(Ljava/lang/String;Z)Z' not in lines[j]:
+                          continue
+                      m = re.search(r'\{[^,]+,\s*[^,]+,\s*([^}]+)\}', lines[j])
+                      if not m:
+                          break
+                      default_reg = m.group(1).strip()
+                      for k in range(j - 1, max(i - 1, j - 35), -1):
+                          if re.search(rf'^\s*const/4\s+{re.escape(default_reg)},\s*0x0\s*$', lines[k]):
+                              lines[k] = re.sub(r'0x0\s*$', '0x1', lines[k])
+                              changed += 1
+                              break
+                      break
+              path.write_text('\n'.join(lines) + '\n')
+
+          if changed < 2:
+              raise SystemExit(f'Expected to patch at least 2 recording-default reads, patched {changed}')
+
+          # Android 11+: accept either strong biometric OR device credential (PIN/password/pattern).
+          auth = Path('decoded/smali/y5/d.smali')
+          text = auth.read_text()
+          old = '    const/16 v4, 0xf\n'
+          new = '    const v4, 0x800f\n'
+          if old not in text:
+              raise SystemExit('Could not find biometric-only authenticator mask')
+          text = text.replace(old, new, 1)
+          auth.write_text(text)
+          PY
+
+          grep -q '>Recall<' decoded/res/values/strings.xml
+          grep -q 'const v4, 0x800f' decoded/smali/y5/d.smali
+
+      - name: Rebuild APK
+        run: java -jar apktool.jar b decoded -o Recall-v1.0.1-unsigned.apk
+
+      - name: Align, sign and verify
+        run: |
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/zipalign" -f -p 4 Recall-v1.0.1-unsigned.apk Recall-v1.0.1-aligned.apk
+          keytool -genkeypair -v -keystore recall-v101.jks -storepass recallbuild -keypass recallbuild -alias recall -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Recall v1.0.1, OU=Android, O=PCG, L=Owosso, ST=Michigan, C=US'
+          "$BUILD_TOOLS/apksigner" sign --ks recall-v101.jks --ks-pass pass:recallbuild --key-pass pass:recallbuild --out Recall-v1.0.1.apk Recall-v1.0.1-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose Recall-v1.0.1.apk
+          "$BUILD_TOOLS/aapt2" dump badging Recall-v1.0.1.apk | head -12
+          sha256sum Recall-v1.0.1.apk > Recall-v1.0.1.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Recall-v1.0.1-APK
+          path: |
+            Recall-v1.0.1.apk
+            Recall-v1.0.1.sha256
+          if-no-files-found: error
+          retention-days: 30
