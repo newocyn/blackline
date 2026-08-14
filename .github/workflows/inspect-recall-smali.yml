@@ -21,12 +21,10 @@ jobs:
           echo '2e78bd8b2e839a62712b9b686ef242d1b2623a6541f342cec285dca0e0da2084  base.apk' | sha256sum -c -
           curl -L --fail --retry 3 -o apktool.jar https://github.com/iBotPeaches/Apktool/releases/download/v3.0.2/apktool_3.0.2.jar
           echo 'eee4669a704a14e0623407e6701b0b91887e61e1e4049cb7a82833e14ae8b5fd  apktool.jar' | sha256sum -c -
-      - name: Decode and print target methods
+      - name: Decode and locate target bytecode
         run: |
           java -jar apktool.jar d -f base.apk -o decoded >/dev/null
-          echo '===== MySharedPref ====='
-          FILE=$(find decoded -path '*com/android/alftendev/utils/MySharedPref.smali' | head -1)
-          sed -n '/method.*getIsRecordNotificationsEnabled/,/.end method/p' "$FILE"
-          echo '===== AuthUtils ====='
-          FILE2=$(find decoded -path '*com/android/alftendev/utils/AuthUtils.smali' | head -1)
-          sed -n '/method.*isBiometricAuthAvailable/,/.end method/p' "$FILE2"
+          echo '===== Recording preference key matches ====='
+          grep -R -n -B12 -A20 'isRecordNotificationEnabled' decoded/smali* || true
+          echo '===== Auth text / biometric matches ====='
+          grep -R -n -B18 -A45 'BIOMETRIC_STRONG\|canAuthenticate\|authNoEnrolled\|isDeviceSecure' decoded/smali* | head -500 || true
