@@ -1,0 +1,59 @@
+name: Build Recall v1.1.0
+
+on:
+  push:
+    branches: ["agent/recall-v1"]
+    paths:
+      - ".github/scripts/recall_v11_patch.py"
+      - ".github/workflows/build-recall-v110.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Prepare Recall source
+        run: |
+          git clone https://github.com/Alfio010/notification-listener-android.git recall-source
+          cd recall-source
+          git checkout 91cd9a174f7b34c825e57df1a5a563fd3d63ff62
+          cd ..
+          python3 .github/scripts/recall_v11_patch.py recall-source
+
+      - name: Build Recall APK
+        working-directory: recall-source
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Verify and package
+        run: |
+          cp recall-source/app/build/outputs/apk/debug/app-debug.apk Recall-v1.1.0.apk
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          "$BUILD_TOOLS/apksigner" verify --verbose Recall-v1.1.0.apk
+          "$BUILD_TOOLS/aapt2" dump badging Recall-v1.1.0.apk | head -15
+          "$BUILD_TOOLS/aapt2" dump badging Recall-v1.1.0.apk | grep -q "package: name='online.pcguys.recall'"
+          "$BUILD_TOOLS/aapt2" dump badging Recall-v1.1.0.apk | grep -q "application-label:'Recall'"
+          sha256sum Recall-v1.1.0.apk | tee Recall-v1.1.0.sha256
+
+      - name: Package corresponding source
+        run: |
+          rm -rf recall-source/.git recall-source/app/build recall-source/.gradle
+          zip -qr Recall-v1.1.0-source.zip recall-source
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Recall-v1.1.0
+          path: |
+            Recall-v1.1.0.apk
+            Recall-v1.1.0.sha256
+            Recall-v1.1.0-source.zip
+          if-no-files-found: error
+          retention-days: 30
