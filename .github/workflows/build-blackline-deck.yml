@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -84,7 +84,7 @@ jobs:
           zip -qr dist/BLACKLINE-v0.1.0-source.zip termux-app \
             -x '*/.idea/*' '*/local.properties'
 
-      - name: Upload BLACKLINE build
+      - name: Upload BLACKLINE build artifact
         uses: actions/upload-artifact@v4
         with:
           name: BLACKLINE-v0.1.0
@@ -93,3 +93,25 @@ jobs:
             dist/BLACKLINE-v0.1.0.sha256
             dist/BLACKLINE-v0.1.0-source.zip
           retention-days: 30
+
+      - name: Publish BLACKLINE v0.1.0 release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view blackline-v0.1.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload blackline-v0.1.0 \
+              dist/BLACKLINE-v0.1.0.apk \
+              dist/BLACKLINE-v0.1.0.sha256 \
+              dist/BLACKLINE-v0.1.0-source.zip \
+              --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create blackline-v0.1.0 \
+              dist/BLACKLINE-v0.1.0.apk \
+              dist/BLACKLINE-v0.1.0.sha256 \
+              dist/BLACKLINE-v0.1.0-source.zip \
+              --target "$GITHUB_SHA" \
+              --title "BLACKLINE v0.1.0" \
+              --notes "BLACKLINE // DECK v0.1.0. Android/Linux terminal based on the GPLv3 Termux terminal engine, with BLACKLINE cyberdeck styling, node telemetry, and an official Kali NetHunter Rootless bootstrap command." \
+              --repo "$GITHUB_REPOSITORY"
+          fi
