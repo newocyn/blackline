@@ -22,7 +22,7 @@ import kotlin.math.abs
 class EdgeDockService : Service() {
     private lateinit var wm: WindowManager
     private var view: View? = null
-    private val cyan = Color.rgb(69, 246, 229)
+    private val accent = Color.WHITE
     private val prefs by lazy { getSharedPreferences("blackline_home", MODE_PRIVATE) }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -30,15 +30,17 @@ class EdgeDockService : Service() {
     override fun onCreate() {
         super.onCreate()
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
-        if (Settings.canDrawOverlays(this)) showCollapsed()
+        if (Settings.canDrawOverlays(this) && prefs.getBoolean("edge_enabled", false)) {
+            safeShowCollapsed()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!Settings.canDrawOverlays(this)) {
+        if (!Settings.canDrawOverlays(this) || !prefs.getBoolean("edge_enabled", false)) {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (view == null) showCollapsed()
+        if (view == null) safeShowCollapsed()
         return START_STICKY
     }
 
@@ -59,6 +61,20 @@ class EdgeDockService : Service() {
         y = prefs.getInt("edge_y", 280)
     }
 
+    private fun safeShowCollapsed() {
+        runCatching { showCollapsed() }.onFailure {
+            removeView()
+            stopSelf()
+        }
+    }
+
+    private fun safeShowExpanded() {
+        runCatching { showExpanded() }.onFailure {
+            removeView()
+            safeShowCollapsed()
+        }
+    }
+
     private fun showCollapsed() {
         removeView()
         val handle = TextView(this).apply {
@@ -66,8 +82,8 @@ class EdgeDockService : Service() {
             gravity = Gravity.CENTER
             textSize = 15f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(cyan)
-            background = rounded(Color.argb(230, 6, 8, 10), 0f, 16f, 16f, 0f, Color.argb(145, 69, 246, 229))
+            setTextColor(accent)
+            background = rounded(Color.argb(236, 4, 5, 7), 0f, 16f, 16f, 0f, Color.argb(150, 255, 255, 255))
             setTooltipText("BLACKLINE")
         }
         val p = params(dp(28), dp(70))
@@ -91,7 +107,7 @@ class EdgeDockService : Service() {
                 }
                 MotionEvent.ACTION_UP -> {
                     prefs.edit().putInt("edge_y", p.y).apply()
-                    if (!moved) showExpanded()
+                    if (!moved) safeShowExpanded()
                     true
                 }
                 else -> false
@@ -107,21 +123,21 @@ class EdgeDockService : Service() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(7), dp(10), dp(7), dp(10))
-            background = rounded(Color.argb(242, 5, 7, 9), 0f, 20f, 20f, 0f, Color.argb(145, 69, 246, 229))
+            background = rounded(Color.argb(246, 4, 5, 7), 0f, 20f, 20f, 0f, Color.argb(145, 255, 255, 255))
         }
 
-        root.addView(glyph("‹", "COLLAPSE") { showCollapsed() })
+        root.addView(glyph("‹", "COLLAPSE") { safeShowCollapsed() })
         root.addView(glyph(">_", "TERMINAL") {
             launchIntent(Intent(this, TerminalActivity::class.java))
-            showCollapsed()
+            safeShowCollapsed()
         }, mt(7))
         root.addView(glyph("⌂", "HOME") {
-            launchIntent(Intent(this, MainActivity::class.java))
-            showCollapsed()
+            launchIntent(Intent(this, DesktopActivity::class.java))
+            safeShowCollapsed()
         }, mt(7))
         root.addView(glyph("▦", "APPS") {
-            launchIntent(Intent(this, MainActivity::class.java).putExtra("openDrawer", true))
-            showCollapsed()
+            launchIntent(Intent(this, DesktopActivity::class.java).putExtra("openDrawer", true))
+            safeShowCollapsed()
         }, mt(7))
 
         val scroll = ScrollView(this)
@@ -153,7 +169,7 @@ class EdgeDockService : Service() {
     }
 
     private fun appButton(app: AppCache.Entry): View = FrameLayout(this).apply {
-        background = rounded(Color.argb(110, 18, 22, 25), 13f, 13f, 13f, 13f, Color.argb(55, 255, 255, 255))
+        background = rounded(Color.argb(120, 18, 19, 22), 13f, 13f, 13f, 13f, Color.argb(55, 255, 255, 255))
         setTooltipText(app.label)
         addView(ImageView(this@EdgeDockService).apply {
             setImageDrawable(app.icon)
@@ -161,7 +177,7 @@ class EdgeDockService : Service() {
         }, FrameLayout.LayoutParams(-1, -1))
         setOnClickListener {
             packageManager.getLaunchIntentForPackage(app.pkg)?.let { launchIntent(it) }
-            showCollapsed()
+            safeShowCollapsed()
         }
         layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
     }
@@ -171,9 +187,9 @@ class EdgeDockService : Service() {
         gravity = Gravity.CENTER
         textSize = 19f
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        setTextColor(cyan)
+        setTextColor(accent)
         setTooltipText(tip)
-        background = rounded(Color.argb(125, 18, 22, 25), 13f, 13f, 13f, 13f, Color.argb(75, 69, 246, 229))
+        background = rounded(Color.argb(135, 18, 19, 22), 13f, 13f, 13f, 13f, Color.argb(75, 255, 255, 255))
         setOnClickListener { action() }
         layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
     }
