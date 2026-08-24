@@ -115,3 +115,22 @@ jobs:
               --notes "BLACKLINE // DECK v0.1.0. Android/Linux terminal based on the GPLv3 Termux terminal engine, with BLACKLINE cyberdeck styling, node telemetry, and an official Kali NetHunter Rootless bootstrap command." \
               --repo "$GITHUB_REPOSITORY"
           fi
+
+      - name: Record build status
+        if: always()
+        shell: bash
+        working-directory: blackline-control
+        run: |
+          mkdir -p build-status
+          cat > build-status/blackline-deck.txt <<EOF
+          run_id=${GITHUB_RUN_ID}
+          run_url=https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+          status=${{ job.status }}
+          source_sha=${GITHUB_SHA}
+          recorded_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          EOF
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add build-status/blackline-deck.txt
+          git commit -m "Record BLACKLINE build ${GITHUB_RUN_ID}: ${{ job.status }}" || exit 0
+          git push origin HEAD:agent/blackline-deck
