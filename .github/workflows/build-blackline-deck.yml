@@ -1,0 +1,95 @@
+name: Build BLACKLINE Deck
+
+on:
+  push:
+    branches:
+      - agent/blackline-deck
+    paths:
+      - 'blackline-deck/**'
+      - '.github/workflows/build-blackline-deck.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout BLACKLINE control files
+        uses: actions/checkout@v4
+        with:
+          path: blackline-control
+
+      - name: Checkout pinned Termux foundation
+        uses: actions/checkout@v4
+        with:
+          repository: termux/termux-app
+          ref: 3df69d1da197dd9bd71a3bafd902dffd720576b4
+          path: termux-app
+          fetch-depth: 1
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK components
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "ndk;29.0.14206865"
+
+      - name: Apply BLACKLINE source patches
+        shell: bash
+        run: |
+          cp blackline-control/blackline-deck/patch_blackline.py .
+          python3 patch_blackline.py
+          grep -q 'BLACKLINE' termux-app/app/src/main/res/values/strings.xml
+          grep -q 'blackline-kali' termux-app/app/src/main/assets/blackline-init.sh
+
+      - name: Build BLACKLINE universal APK
+        working-directory: termux-app
+        shell: bash
+        env:
+          TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS: '0'
+          TERMUX_PACKAGE_VARIANT: apt-android-7
+          TERMUX_APP_VERSION_NAME: 0.1.0
+          TERMUX_APK_VERSION_TAG: blackline-v0.1.0
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Package APK and corresponding source
+        shell: bash
+        run: |
+          mkdir -p dist
+          APK="$(find termux-app/app/build/outputs/apk/debug -type f -name '*.apk' | head -n 1)"
+          if [ -z "$APK" ]; then
+            echo 'No APK generated'
+            find termux-app/app/build/outputs -maxdepth 5 -type f || true
+            exit 1
+          fi
+          cp "$APK" dist/BLACKLINE-v0.1.0.apk
+          sha256sum dist/BLACKLINE-v0.1.0.apk | tee dist/BLACKLINE-v0.1.0.sha256
+
+          rm -rf termux-app/.git termux-app/.gradle
+          find termux-app -type d -name build -prune -exec rm -rf {} + || true
+          zip -qr dist/BLACKLINE-v0.1.0-source.zip termux-app \
+            -x '*/.idea/*' '*/local.properties'
+
+      - name: Upload BLACKLINE build
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLACKLINE-v0.1.0
+          path: |
+            dist/BLACKLINE-v0.1.0.apk
+            dist/BLACKLINE-v0.1.0.sha256
+            dist/BLACKLINE-v0.1.0-source.zip
+          retention-days: 30
