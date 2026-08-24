@@ -2,10 +2,9 @@ name: Build BLACKLINE Home APK
 
 on:
   push:
-    branches: [ "agent/blackline-home" ]
+    branches: [ "main" ]
     paths:
       - "blackline_home/**"
-      - "settings.gradle.kts"
       - ".github/workflows/build-blackline-home.yml"
   workflow_dispatch:
 
@@ -28,14 +27,14 @@ jobs:
         run: gradle :blackline_home:assembleDebug --stacktrace
       - name: Rename APK
         run: |
-          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.2.0.apk
-          sha256sum BLACKLINE-Home-v0.2.0.apk > BLACKLINE-Home-v0.2.0.sha256
+          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.3.0.apk
+          sha256sum BLACKLINE-Home-v0.3.0.apk > BLACKLINE-Home-v0.3.0.sha256
       - uses: actions/upload-artifact@v4
         with:
-          name: BLACKLINE-Home-v0.2.0
+          name: BLACKLINE-Home-v0.3.0
           path: |
-            BLACKLINE-Home-v0.2.0.apk
-            BLACKLINE-Home-v0.2.0.sha256
+            BLACKLINE-Home-v0.3.0.apk
+            BLACKLINE-Home-v0.3.0.sha256
           if-no-files-found: error
       - name: Record build status
         if: always()
@@ -48,4 +47,4 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add build-status/blackline-home.txt
           git commit -m "Record BLACKLINE Home build status" || exit 0
-          git push origin HEAD:agent/blackline-home
+          git push origin HEAD:main
