@@ -19,7 +19,8 @@
 
         <activity
             android:name=".TerminalActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <activity
             android:name=".MainActivity"
@@ -27,6 +28,10 @@
 
         <activity
             android:name=".DesktopActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".BlacklineHomeActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="portrait">
