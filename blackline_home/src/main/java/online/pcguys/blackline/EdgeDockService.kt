@@ -11,20 +11,17 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import java.util.Locale
 import kotlin.math.abs
 
 class EdgeDockService : Service() {
     private lateinit var wm: WindowManager
     private var view: View? = null
-    private var expanded = false
     private val cyan = Color.rgb(69, 246, 229)
     private val prefs by lazy { getSharedPreferences("blackline_home", MODE_PRIVATE) }
 
@@ -37,7 +34,10 @@ class EdgeDockService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!Settings.canDrawOverlays(this)) { stopSelf(); return START_NOT_STICKY }
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (view == null) showCollapsed()
         return START_STICKY
     }
@@ -60,23 +60,28 @@ class EdgeDockService : Service() {
     }
 
     private fun showCollapsed() {
-        expanded = false
         removeView()
         val handle = TextView(this).apply {
             text = "//"
             gravity = Gravity.CENTER
-            textSize = 16f
+            textSize = 15f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(cyan)
-            background = rounded(Color.argb(235, 6, 8, 10), 0f, 18f, 18f, 0f, Color.argb(150, 69, 246, 229))
+            background = rounded(Color.argb(230, 6, 8, 10), 0f, 16f, 16f, 0f, Color.argb(145, 69, 246, 229))
+            setTooltipText("BLACKLINE")
         }
-        val p = params(dp(30), dp(78))
+        val p = params(dp(28), dp(70))
         var downY = 0f
         var startY = 0
         var moved = false
         handle.setOnTouchListener { _, event ->
             when (event.action) {
-                MotionEvent.ACTION_DOWN -> { downY = event.rawY; startY = p.y; moved = false; true }
+                MotionEvent.ACTION_DOWN -> {
+                    downY = event.rawY
+                    startY = p.y
+                    moved = false
+                    true
+                }
                 MotionEvent.ACTION_MOVE -> {
                     val delta = (event.rawY - downY).toInt()
                     if (abs(delta) > dp(6)) moved = true
@@ -97,76 +102,80 @@ class EdgeDockService : Service() {
     }
 
     private fun showExpanded() {
-        expanded = true
         removeView()
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(7), dp(10), dp(7), dp(10))
-            background = rounded(Color.argb(245, 5, 7, 9), 0f, 22f, 22f, 0f, Color.argb(150, 69, 246, 229))
+            background = rounded(Color.argb(242, 5, 7, 9), 0f, 20f, 20f, 0f, Color.argb(145, 69, 246, 229))
         }
+
         root.addView(glyph("‹", "COLLAPSE") { showCollapsed() })
         root.addView(glyph(">_", "TERMINAL") {
             launchIntent(Intent(this, TerminalActivity::class.java))
             showCollapsed()
-        }, mt(8))
+        }, mt(7))
         root.addView(glyph("⌂", "HOME") {
             launchIntent(Intent(this, MainActivity::class.java))
             showCollapsed()
-        }, mt(8))
+        }, mt(7))
         root.addView(glyph("▦", "APPS") {
             launchIntent(Intent(this, MainActivity::class.java).putExtra("openDrawer", true))
             showCollapsed()
-        }, mt(8))
+        }, mt(7))
 
         val scroll = ScrollView(this)
-        val appsHolder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
-        favoriteApps().take(7).forEach { app -> appsHolder.addView(appButton(app), mt(8)) }
+        val appsHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+        }
+        favoriteApps().take(8).forEach { app -> appsHolder.addView(appButton(app), mt(7)) }
         scroll.addView(appsHolder)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = dp(4) })
 
-        val p = params(dp(76), WindowManager.LayoutParams.MATCH_PARENT).apply { y = 0 }
+        val p = params(dp(72), WindowManager.LayoutParams.MATCH_PARENT).apply { y = 0 }
         view = root
         wm.addView(root, p)
     }
 
-    private data class EdgeApp(val pkg: String, val label: String, val icon: android.graphics.drawable.Drawable)
-
-    private fun favoriteApps(): List<EdgeApp> {
-        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val all = packageManager.queryIntentActivities(launcher, 0)
-            .filter { it.activityInfo.packageName != packageName }
-            .distinctBy { it.activityInfo.packageName }
-            .map { EdgeApp(it.activityInfo.packageName, it.loadLabel(packageManager).toString(), it.loadIcon(packageManager)) }
-            .sortedBy { it.label.lowercase(Locale.US) }
+    private fun favoriteApps(): List<AppCache.Entry> {
+        var all = AppCache.current()
+        if (all.isEmpty()) {
+            all = runCatching { AppCache.load(packageManager, packageName) }.getOrDefault(emptyList())
+        }
         val favs = prefs.getStringSet("favorites", emptySet()) ?: emptySet()
         if (favs.isNotEmpty()) return all.filter { favs.contains(it.pkg) }
         val preferred = listOf("chrome", "messages", "phone", "camera", "gmail", "maps")
-        val picked = preferred.mapNotNull { needle -> all.firstOrNull { it.label.contains(needle, true) || it.pkg.contains(needle, true) } }.distinctBy { it.pkg }
+        val picked = preferred.mapNotNull { needle ->
+            all.firstOrNull { it.label.contains(needle, true) || it.pkg.contains(needle, true) }
+        }.distinctBy { it.pkg }
         return if (picked.isNotEmpty()) picked else all.take(6)
     }
 
-    private fun appButton(app: EdgeApp): View = FrameLayout(this).apply {
-        background = rounded(Color.argb(120, 18, 22, 25), 14f, 14f, 14f, 14f, Color.argb(60, 255, 255, 255))
+    private fun appButton(app: AppCache.Entry): View = FrameLayout(this).apply {
+        background = rounded(Color.argb(110, 18, 22, 25), 13f, 13f, 13f, 13f, Color.argb(55, 255, 255, 255))
         setTooltipText(app.label)
-        addView(ImageView(this@EdgeDockService).apply { setImageDrawable(app.icon); setPadding(dp(9), dp(9), dp(9), dp(9)) }, FrameLayout.LayoutParams(-1, -1))
+        addView(ImageView(this@EdgeDockService).apply {
+            setImageDrawable(app.icon)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }, FrameLayout.LayoutParams(-1, -1))
         setOnClickListener {
             packageManager.getLaunchIntentForPackage(app.pkg)?.let { launchIntent(it) }
             showCollapsed()
         }
-        layoutParams = LinearLayout.LayoutParams(dp(54), dp(54))
+        layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
     }
 
     private fun glyph(textValue: String, tip: String, action: () -> Unit): View = TextView(this).apply {
         text = textValue
         gravity = Gravity.CENTER
-        textSize = 20f
+        textSize = 19f
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         setTextColor(cyan)
         setTooltipText(tip)
-        background = rounded(Color.argb(130, 18, 22, 25), 14f, 14f, 14f, 14f, Color.argb(80, 69, 246, 229))
+        background = rounded(Color.argb(125, 18, 22, 25), 13f, 13f, 13f, 13f, Color.argb(75, 69, 246, 229))
         setOnClickListener { action() }
-        layoutParams = LinearLayout.LayoutParams(dp(54), dp(54))
+        layoutParams = LinearLayout.LayoutParams(dp(52), dp(52))
     }
 
     private fun launchIntent(intent: Intent) {
@@ -179,12 +188,17 @@ class EdgeDockService : Service() {
         view = null
     }
 
-    private fun mt(v: Int) = LinearLayout.LayoutParams(dp(54), dp(54)).apply { topMargin = dp(v) }
+    private fun mt(v: Int) = LinearLayout.LayoutParams(dp(52), dp(52)).apply { topMargin = dp(v) }
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun rounded(fill: Int, tl: Float, tr: Float, br: Float, bl: Float, stroke: Int) = GradientDrawable().apply {
         setColor(fill)
-        cornerRadii = floatArrayOf(dp(tl.toInt()).toFloat(), dp(tl.toInt()).toFloat(), dp(tr.toInt()).toFloat(), dp(tr.toInt()).toFloat(), dp(br.toInt()).toFloat(), dp(br.toInt()).toFloat(), dp(bl.toInt()).toFloat(), dp(bl.toInt()).toFloat())
+        cornerRadii = floatArrayOf(
+            dp(tl.toInt()).toFloat(), dp(tl.toInt()).toFloat(),
+            dp(tr.toInt()).toFloat(), dp(tr.toInt()).toFloat(),
+            dp(br.toInt()).toFloat(), dp(br.toInt()).toFloat(),
+            dp(bl.toInt()).toFloat(), dp(bl.toInt()).toFloat()
+        )
         setStroke(dp(1), stroke)
     }
 }
