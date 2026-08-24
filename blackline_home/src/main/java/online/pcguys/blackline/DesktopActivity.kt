@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -56,6 +57,8 @@ class DesktopActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         taskbarCollapsed = prefs.getBoolean("taskbar_collapsed", false)
         apps = AppCache.current()
         safeRenderDesktop()
@@ -121,20 +124,12 @@ class DesktopActivity : AppCompatActivity() {
 
     private fun renderDesktop() {
         val root = FrameLayout(this).apply {
-            setBackgroundColor(Color.rgb(11, 12, 14))
+            setBackgroundColor(Color.TRANSPARENT)
             isLongClickable = true
             setOnLongClickListener {
                 showDesktopMenu()
                 true
             }
-        }
-
-        runCatching {
-            val wallpaper = WallpaperManager.getInstance(this).drawable
-            root.addView(ImageView(this).apply {
-                scaleType = ImageView.ScaleType.CENTER_CROP
-                setImageDrawable(wallpaper)
-            }, FrameLayout.LayoutParams(-1, -1))
         }
 
         root.addView(desktopIconGrid(), FrameLayout.LayoutParams(-1, -2, Gravity.TOP).apply {
