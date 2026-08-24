@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.BLACKLINE" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#050608</item>
+        <item name="android:navigationBarColor">#050608</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="colorPrimary">#45F6E5</item>
+        <item name="colorSecondary">#45F6E5</item>
+        <item name="android:windowBackground">#050608</item>
+    </style>
+</resources>

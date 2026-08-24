@@ -1,0 +1,51 @@
+name: Build BLACKLINE Home APK
+
+on:
+  push:
+    branches: [ "agent/blackline-home" ]
+    paths:
+      - "blackline_home/**"
+      - "settings.gradle.kts"
+      - ".github/workflows/build-blackline-home.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build BLACKLINE Home debug APK
+        run: gradle :blackline_home:assembleDebug --stacktrace
+      - name: Rename APK
+        run: |
+          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.2.0.apk
+          sha256sum BLACKLINE-Home-v0.2.0.apk > BLACKLINE-Home-v0.2.0.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BLACKLINE-Home-v0.2.0
+          path: |
+            BLACKLINE-Home-v0.2.0.apk
+            BLACKLINE-Home-v0.2.0.sha256
+          if-no-files-found: error
+      - name: Record build status
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build-status
+          printf 'run_id=%s\nrun_url=https://github.com/%s/actions/runs/%s\nstatus=%s\nsource_sha=%s\nrecorded_at=%s\n' \
+            "$GITHUB_RUN_ID" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "${{ job.status }}" "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > build-status/blackline-home.txt
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add build-status/blackline-home.txt
+          git commit -m "Record BLACKLINE Home build status" || exit 0
+          git push origin HEAD:agent/blackline-home
