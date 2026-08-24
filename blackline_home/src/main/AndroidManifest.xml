@@ -23,6 +23,10 @@
 
         <activity
             android:name=".MainActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".DesktopActivity"
             android:exported="true"
             android:launchMode="singleTask">
             <intent-filter>
