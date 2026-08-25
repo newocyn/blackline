@@ -27,6 +27,9 @@ jobs:
       - name: Apply BLACKLINE home privacy search
         run: python3 blackline_home/tools/privacy_search_patch.py
 
+      - name: Apply BLACKLINE Tech Deck corner gesture
+        run: python3 blackline_home/tools/tech_deck_gesture_patch.py
+
       - name: Bundle ARM64 PRoot runtime
         shell: bash
         run: |
@@ -44,15 +47,15 @@ jobs:
 
       - name: Rename APK
         run: |
-          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.8.1.apk
-          sha256sum BLACKLINE-Home-v0.8.1.apk > BLACKLINE-Home-v0.8.1.sha256
+          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.9.0.apk
+          sha256sum BLACKLINE-Home-v0.9.0.apk > BLACKLINE-Home-v0.9.0.sha256
 
       - uses: actions/upload-artifact@v4
         with:
-          name: BLACKLINE-Home-v0.8.1
+          name: BLACKLINE-Home-v0.9.0
           path: |
-            BLACKLINE-Home-v0.8.1.apk
-            BLACKLINE-Home-v0.8.1.sha256
+            BLACKLINE-Home-v0.9.0.apk
+            BLACKLINE-Home-v0.9.0.sha256
           if-no-files-found: error
 
       - name: Record build status
