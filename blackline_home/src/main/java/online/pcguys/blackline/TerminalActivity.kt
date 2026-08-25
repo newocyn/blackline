@@ -57,7 +57,7 @@ class TerminalActivity : AppCompatActivity() {
         append("BLACKLINE // TERMINAL\n")
         append("NATIVE ENGINE // ${Build.MODEL} // API ${Build.VERSION.SDK_INT}\n")
         append("Streaming process output • persistent aliases/env • Android bridge • Kali/PRoot backend\n")
-        append("No Termux application/runtime dependency.\n\n")
+        append("Technician Tech Deck • no Termux application/runtime dependency.\n\n")
         promptAndroid()
     }
 
@@ -91,7 +91,6 @@ class TerminalActivity : AppCompatActivity() {
             setBackgroundColor(bg)
         }
 
-        // IME-aware: command bar + shortcut controls always remain above the keyboard.
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             val bars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
@@ -102,32 +101,36 @@ class TerminalActivity : AppCompatActivity() {
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(8), dp(8), dp(8))
+            setPadding(dp(10), dp(8), dp(7), dp(8))
             setBackgroundColor(Color.rgb(9, 12, 15))
         }
         top.addView(TextView(this).apply {
             text = "BLACKLINE // SHELL"
-            textSize = 10.5f
-            letterSpacing = .10f
+            textSize = 9.8f
+            letterSpacing = .09f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(cyan)
         }, LinearLayout.LayoutParams(0, -2, 1f))
 
         modeChip = chip("ANDROID").apply { setOnClickListener { toggleMode() } }
-        top.addView(modeChip, LinearLayout.LayoutParams(dp(74), dp(38)).apply { rightMargin = dp(5) })
+        top.addView(modeChip, LinearLayout.LayoutParams(dp(70), dp(38)).apply { rightMargin = dp(4) })
+
+        top.addView(chip("TECH").apply {
+            setOnClickListener { startActivity(Intent(this@TerminalActivity, TechToolsActivity::class.java)) }
+        }, LinearLayout.LayoutParams(dp(48), dp(38)).apply { rightMargin = dp(4) })
 
         stopChip = chip("STOP").apply {
             alpha = .45f
             setOnClickListener { stopActive() }
         }
-        top.addView(stopChip, LinearLayout.LayoutParams(dp(52), dp(38)).apply { rightMargin = dp(5) })
+        top.addView(stopChip, LinearLayout.LayoutParams(dp(48), dp(38)).apply { rightMargin = dp(4) })
 
         top.addView(chip("HOME").apply {
             setOnClickListener {
                 startActivity(Intent(this@TerminalActivity, BlacklineHomeActivity::class.java))
                 finish()
             }
-        }, LinearLayout.LayoutParams(dp(55), dp(38)))
+        }, LinearLayout.LayoutParams(dp(52), dp(38)))
         root.addView(top)
 
         scroll = ScrollView(this).apply {
@@ -204,6 +207,7 @@ class TerminalActivity : AppCompatActivity() {
         val items = if (mode == Mode.ANDROID) {
             listOf(
                 "HELP" to { execute("help") },
+                "TECH" to { startActivity(Intent(this, TechToolsActivity::class.java)) },
                 "LS" to { execute("ls") },
                 "PWD" to { execute("pwd") },
                 "DEVICE" to { execute("device") },
@@ -213,6 +217,7 @@ class TerminalActivity : AppCompatActivity() {
             )
         } else {
             listOf(
+                "TECH" to { startActivity(Intent(this, TechToolsActivity::class.java)) },
                 "ID" to { execute("id") },
                 "LS" to { execute("ls -la") },
                 "PWD" to { execute("pwd") },
