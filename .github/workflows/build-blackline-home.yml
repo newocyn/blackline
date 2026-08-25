@@ -23,19 +23,35 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+
+      - name: Bundle ARM64 PRoot runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p blackline_home/src/main/jniLibs/arm64-v8a
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/proot-me/proot-static-build/master/static/proot-arm64 \
+            -o blackline_home/src/main/jniLibs/arm64-v8a/libblackline_proot.so
+          chmod 755 blackline_home/src/main/jniLibs/arm64-v8a/libblackline_proot.so
+          file blackline_home/src/main/jniLibs/arm64-v8a/libblackline_proot.so
+          test "$(stat -c%s blackline_home/src/main/jniLibs/arm64-v8a/libblackline_proot.so)" -gt 500000
+
       - name: Build BLACKLINE Home debug APK
         run: gradle :blackline_home:assembleDebug --stacktrace
+
       - name: Rename APK
         run: |
-          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.6.0.apk
-          sha256sum BLACKLINE-Home-v0.6.0.apk > BLACKLINE-Home-v0.6.0.sha256
+          cp blackline_home/build/outputs/apk/debug/blackline_home-debug.apk BLACKLINE-Home-v0.7.0.apk
+          sha256sum BLACKLINE-Home-v0.7.0.apk > BLACKLINE-Home-v0.7.0.sha256
+
       - uses: actions/upload-artifact@v4
         with:
-          name: BLACKLINE-Home-v0.6.0
+          name: BLACKLINE-Home-v0.7.0
           path: |
-            BLACKLINE-Home-v0.6.0.apk
-            BLACKLINE-Home-v0.6.0.sha256
+            BLACKLINE-Home-v0.7.0.apk
+            BLACKLINE-Home-v0.7.0.sha256
           if-no-files-found: error
+
       - name: Record build status
         if: always()
         shell: bash
