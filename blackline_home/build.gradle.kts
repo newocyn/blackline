@@ -11,8 +11,8 @@ android {
         applicationId = "online.pcguys.blackline"
         minSdk = 26
         targetSdk = 35
-        versionCode = 80
-        versionName = "0.8.0"
+        versionCode = 81
+        versionName = "0.8.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
