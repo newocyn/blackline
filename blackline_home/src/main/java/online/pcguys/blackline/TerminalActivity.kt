@@ -12,6 +12,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -24,6 +25,8 @@ import java.util.concurrent.Executors
 import kotlin.math.max
 
 class TerminalActivity : AppCompatActivity() {
+    private enum class Mode { ANDROID, KALI }
+
     private val cyan = Color.rgb(69, 246, 229)
     private val bg = Color.rgb(4, 6, 8)
     private val dim = Color.rgb(138, 153, 163)
@@ -32,22 +35,30 @@ class TerminalActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var scroll: ScrollView
     private lateinit var engine: BlacklineShellEngine
+    private lateinit var kaliSession: KaliSession
+    private lateinit var modeChip: TextView
+    private lateinit var stopChip: TextView
+    private lateinit var shortcutHolder: LinearLayout
 
     private val history = mutableListOf<String>()
     private var historyIndex = 0
     private val executor = Executors.newSingleThreadExecutor()
+    @Volatile private var mode = Mode.ANDROID
+    @Volatile private var androidBusy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         engine = BlacklineShellEngine(this)
+        kaliSession = KaliSession(engine.kali)
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         hideStatusBar()
         buildUi()
         append("BLACKLINE // TERMINAL\n")
-        append("NATIVE SHELL ENGINE // ${Build.MODEL} // API ${Build.VERSION.SDK_INT}\n")
-        append("No Termux dependency. Type 'help' for BLACKLINE commands.\n\n")
-        prompt()
+        append("NATIVE ENGINE // ${Build.MODEL} // API ${Build.VERSION.SDK_INT}\n")
+        append("Streaming process output • persistent aliases/env • Android bridge • Kali/PRoot backend\n")
+        append("No Termux application/runtime dependency.\n\n")
+        promptAndroid()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -56,6 +67,8 @@ class TerminalActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        engine.cancelActive()
+        kaliSession.stop()
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -66,8 +79,7 @@ class TerminalActivity : AppCompatActivity() {
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             window.statusBarColor = Color.TRANSPARENT
             window.navigationBarColor = bg
         }
@@ -79,41 +91,44 @@ class TerminalActivity : AppCompatActivity() {
             setBackgroundColor(bg)
         }
 
-        // Keep the terminal controls above the software keyboard on modern edge-to-edge Android.
+        // IME-aware: command bar + shortcut controls always remain above the keyboard.
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             val bars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            val bottom = max(ime.bottom, bars.bottom)
-            view.setPadding(0, 0, 0, bottom)
+            view.setPadding(0, 0, 0, max(ime.bottom, bars.bottom))
             insets
         }
 
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(14), dp(9), dp(10), dp(9))
+            setPadding(dp(12), dp(8), dp(8), dp(8))
             setBackgroundColor(Color.rgb(9, 12, 15))
-            addView(TextView(this@TerminalActivity).apply {
-                text = "BLACKLINE // SHELL"
-                textSize = 11f
-                letterSpacing = .12f
-                typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-                setTextColor(cyan)
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(TextView(this@TerminalActivity).apply {
-                text = "HOME"
-                textSize = 10f
-                typeface = Typeface.MONOSPACE
-                setTextColor(Color.WHITE)
-                setPadding(dp(12), dp(8), dp(12), dp(8))
-                background = rounded(Color.rgb(18, 23, 27), 12f, Color.rgb(43, 60, 64))
-                setOnClickListener {
-                    startActivity(Intent(this@TerminalActivity, BlacklineHomeActivity::class.java))
-                    finish()
-                }
-            })
         }
-        root.addView(top, LinearLayout.LayoutParams(-1, -2))
+        top.addView(TextView(this).apply {
+            text = "BLACKLINE // SHELL"
+            textSize = 10.5f
+            letterSpacing = .10f
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            setTextColor(cyan)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+
+        modeChip = chip("ANDROID").apply { setOnClickListener { toggleMode() } }
+        top.addView(modeChip, LinearLayout.LayoutParams(dp(74), dp(38)).apply { rightMargin = dp(5) })
+
+        stopChip = chip("STOP").apply {
+            alpha = .45f
+            setOnClickListener { stopActive() }
+        }
+        top.addView(stopChip, LinearLayout.LayoutParams(dp(52), dp(38)).apply { rightMargin = dp(5) })
+
+        top.addView(chip("HOME").apply {
+            setOnClickListener {
+                startActivity(Intent(this@TerminalActivity, BlacklineHomeActivity::class.java))
+                finish()
+            }
+        }, LinearLayout.LayoutParams(dp(55), dp(38)))
+        root.addView(top)
 
         scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -121,38 +136,31 @@ class TerminalActivity : AppCompatActivity() {
         }
         output = TextView(this).apply {
             setTextColor(Color.rgb(222, 233, 236))
-            textSize = 12.5f
+            textSize = 12.2f
             typeface = Typeface.MONOSPACE
             setTextIsSelectable(true)
-            setPadding(dp(14), dp(13), dp(14), dp(20))
+            setPadding(dp(13), dp(12), dp(13), dp(20))
         }
         scroll.addView(output)
         root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        val shortcuts = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(7), dp(5), dp(7), dp(5))
+        val shortcutScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
             setBackgroundColor(Color.rgb(8, 10, 13))
         }
-        listOf(
-            "HELP" to "help",
-            "LS" to "ls",
-            "PWD" to "pwd",
-            "DEVICE" to "device",
-            "DF" to "df -h",
-            "CLEAR" to "clear"
-        ).forEach { pair ->
-            shortcuts.addView(
-                shortcut(pair.first) { execute(pair.second) },
-                LinearLayout.LayoutParams(0, dp(42), 1f).apply { setMargins(dp(3), 0, dp(3), 0) }
-            )
+        shortcutHolder = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(6), dp(5), dp(6), dp(5))
         }
-        root.addView(shortcuts)
+        shortcutScroll.addView(shortcutHolder)
+        root.addView(shortcutScroll, LinearLayout.LayoutParams(-1, dp(52)))
+        drawShortcuts()
 
         val commandBar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(9), dp(7), dp(9), dp(9))
+            setPadding(dp(8), dp(6), dp(8), dp(8))
             setBackgroundColor(Color.rgb(6, 8, 10))
         }
         commandBar.addView(TextView(this).apply {
@@ -191,31 +199,149 @@ class TerminalActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(root)
     }
 
+    private fun drawShortcuts() {
+        shortcutHolder.removeAllViews()
+        val items = if (mode == Mode.ANDROID) {
+            listOf(
+                "HELP" to { execute("help") },
+                "LS" to { execute("ls") },
+                "PWD" to { execute("pwd") },
+                "DEVICE" to { execute("device") },
+                "NET" to { execute("network") },
+                "KALI" to { execute("kali status") },
+                "CLEAR" to { execute("clear") }
+            )
+        } else {
+            listOf(
+                "ID" to { execute("id") },
+                "LS" to { execute("ls -la") },
+                "PWD" to { execute("pwd") },
+                "UNAME" to { execute("uname -a") },
+                "APT UPDATE" to { execute("apt update") },
+                "TOOLS" to { execute("dpkg -l | tail -25") },
+                "EXIT" to { switchToAndroid() }
+            )
+        }
+        items.forEach { (title, action) ->
+            shortcutHolder.addView(shortcut(title, action), LinearLayout.LayoutParams(dp(if (title.length > 6) 84 else 62), dp(42)).apply {
+                leftMargin = dp(3); rightMargin = dp(3)
+            })
+        }
+    }
+
     private fun execute(raw: String) {
         val cmd = raw.trim()
         if (cmd.isBlank()) {
-            prompt()
+            input.requestFocus()
+            return
+        }
+        history.add(cmd)
+        historyIndex = history.size
+
+        if (mode == Mode.KALI) {
+            if (!kaliSession.isRunning()) {
+                append("Kali session is not running. Switching to Android mode.\n")
+                switchToAndroid()
+                return
+            }
+            append("kali# $cmd\n")
+            kaliSession.send(cmd)
+            input.requestFocus()
             return
         }
 
-        history.add(cmd)
-        historyIndex = history.size
-        append("$cmd\n")
-        input.isEnabled = false
-
+        if (androidBusy) {
+            append("A command is still running. Tap STOP first.\n")
+            return
+        }
+        androidBusy = true
+        updateBusyState()
+        append("blackline:${engine.shortPath()}$ $cmd\n")
         executor.execute {
-            val result = engine.execute(cmd)
+            val result = engine.execute(cmd) { chunk -> runOnUiThread { append(chunk) } }
             runOnUiThread {
                 if (result.clearScreen) output.text = ""
                 if (result.output.isNotBlank()) append(result.output)
-                input.isEnabled = true
-                if (result.promptAgain) prompt()
+                androidBusy = false
+                updateBusyState()
+                if (result.promptAgain) promptAndroid()
             }
         }
     }
 
-    private fun prompt() {
-        append("blackline:${engine.shortPath()}$ ")
+    private fun toggleMode() {
+        if (mode == Mode.KALI) switchToAndroid() else switchToKali()
+    }
+
+    private fun switchToKali() {
+        if (androidBusy) {
+            append("Stop the active Android command before switching modes.\n")
+            return
+        }
+        if (!engine.kali.isInstalled()) {
+            append("Kali is not installed yet.\nRun: kali install minimal\n")
+            return
+        }
+        if (!engine.kali.isProotAvailable()) {
+            append("PRoot runtime is missing from this build.\n")
+            return
+        }
+        mode = Mode.KALI
+        modeChip.text = "KALI"
+        input.hint = "kali command"
+        drawShortcuts()
+        updateBusyState()
+        append("\nBLACKLINE // KALI\nStarting persistent Kali ARM64 userspace…\n")
+        try {
+            kaliSession.start(
+                onOutput = { chunk -> runOnUiThread { append(chunk) } },
+                onExit = { code -> runOnUiThread {
+                    append("\nKali session exited ($code).\n")
+                    if (mode == Mode.KALI) switchToAndroid()
+                } }
+            )
+        } catch (e: Exception) {
+            append("Unable to start Kali: ${e.message}\n")
+            switchToAndroid()
+        }
+        input.requestFocus()
+    }
+
+    private fun switchToAndroid() {
+        if (mode == Mode.KALI) kaliSession.stop()
+        mode = Mode.ANDROID
+        modeChip.text = "ANDROID"
+        input.hint = "command"
+        drawShortcuts()
+        updateBusyState()
+        append("\nBLACKLINE // ANDROID\n")
+        promptAndroid()
+    }
+
+    private fun stopActive() {
+        if (mode == Mode.KALI) {
+            if (kaliSession.isRunning()) {
+                append("\nStopping Kali session…\n")
+                kaliSession.stop()
+            }
+            switchToAndroid()
+        } else if (androidBusy) {
+            engine.cancelActive()
+            append("^C\n")
+            androidBusy = false
+            updateBusyState()
+            promptAndroid()
+        }
+    }
+
+    private fun updateBusyState() {
+        val active = androidBusy || (mode == Mode.KALI && kaliSession.isRunning())
+        stopChip.alpha = if (active) 1f else .45f
+        input.isEnabled = mode == Mode.KALI || !androidBusy
+    }
+
+    private fun promptAndroid() {
+        if (mode != Mode.ANDROID) return
         input.requestFocus()
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
@@ -232,10 +358,19 @@ class TerminalActivity : AppCompatActivity() {
         input.setSelection(input.text.length)
     }
 
-    private fun shortcut(title: String, action: () -> Unit): TextView = TextView(this).apply {
+    private fun chip(title: String): TextView = TextView(this).apply {
         text = title
         gravity = Gravity.CENTER
         textSize = 8.5f
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        setTextColor(Color.WHITE)
+        background = rounded(Color.rgb(18, 23, 27), 10f, Color.rgb(43, 60, 64))
+    }
+
+    private fun shortcut(title: String, action: () -> Unit): TextView = TextView(this).apply {
+        text = title
+        gravity = Gravity.CENTER
+        textSize = 8.2f
         typeface = Typeface.MONOSPACE
         setTextColor(cyan)
         background = rounded(Color.rgb(13, 17, 20), 10f, Color.rgb(34, 49, 52))
