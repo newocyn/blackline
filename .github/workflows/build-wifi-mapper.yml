@@ -1,4 +1,4 @@
-name: Build PCG Network Tool APK
+name: Build PCG Network Tool Enterprise APK
 
 on:
   push:
@@ -26,9 +26,9 @@ jobs:
       - name: Build Network Tool debug APK
         run: gradle :wifi_mapper:assembleDebug
       - name: Rename APK
-        run: cp wifi_mapper/build/outputs/apk/debug/wifi_mapper-debug.apk PCG-Network-Tool-v1.0.0.apk
+        run: cp wifi_mapper/build/outputs/apk/debug/wifi_mapper-debug.apk PCG-Network-Tool-Enterprise-v2.0.0.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: PCG-Network-Tool-APK
+          name: PCG-Network-Tool-Enterprise-APK
           path: PCG-Network-Tool-v1.0.0.apk
           if-no-files-found: error
