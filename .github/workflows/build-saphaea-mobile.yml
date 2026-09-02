@@ -57,7 +57,8 @@ jobs:
           sed -i '/import okhttp3\.\*/a import okhttp3.MediaType.Companion.toMediaType\nimport okhttp3.MediaType.Companion.toMediaTypeOrNull\nimport okhttp3.RequestBody.Companion.toRequestBody' "$PROXY"
           UI="saphaea_mobile/src/main/java/com/saphaea/inspector/mobile/Ui.kt"
           sed -i 's/        singleLine = true/        isSingleLine = true/' "$UI"
-          python3 -c 'from pathlib import Path; p=Path("saphaea_mobile/build.gradle.kts"); s=p.read_text(); marker="    kotlinOptions { jvmTarget = \"17\" }\\n}"; replacement="    kotlinOptions { jvmTarget = \"17\" }\\n\\n    packaging {\\n        resources {\\n            excludes += setOf(\\n                \"META-INF/versions/9/OSGI-INF/MANIFEST.MF\"\\n            )\\n        }\\n    }\\n}"; assert marker in s, "packaging patch marker missing"; p.write_text(s.replace(marker,replacement))'
+          awk '{ print; if ($0 ~ /kotlinOptions \{ jvmTarget = "17" \}/) { print ""; print "    packaging {"; print "        resources {"; print "            excludes += setOf(\"META-INF/versions/9/OSGI-INF/MANIFEST.MF\")"; print "        }"; print "    }" } }' saphaea_mobile/build.gradle.kts > saphaea_mobile/build.gradle.kts.tmp
+          mv saphaea_mobile/build.gradle.kts.tmp saphaea_mobile/build.gradle.kts
 
       - name: Build Saphaea Inspector Mobile debug APK
         run: gradle :saphaea_mobile:assembleDebug --stacktrace
