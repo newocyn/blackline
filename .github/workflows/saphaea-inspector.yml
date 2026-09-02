@@ -32,6 +32,9 @@ jobs:
           $proxyFile = "$env:GITHUB_WORKSPACE\saphaea-inspector\Services\ProxyService.cs"
           $proxySource = Get-Content $proxyFile -Raw
           Set-Content $proxyFile ("using System.IO;`r`nusing System.Net.Http;`r`n" + $proxySource)
+          $mainFile = "$env:GITHUB_WORKSPACE\saphaea-inspector\MainWindow.xaml.cs"
+          $mainSource = Get-Content $mainFile -Raw
+          Set-Content $mainFile ("using System.IO;`r`n" + $mainSource)
 
       - name: Restore
         shell: pwsh
