@@ -28,10 +28,19 @@ jobs:
           $parts = @(
             ".github\saphaea-v03\source.part00",
             ".github\saphaea-v03\source.part01",
-            ".github\saphaea-v03\source.part02",
+            ".github\saphaea-v03\source.part02a",
+            ".github\saphaea-v03\source.part02b",
+            ".github\saphaea-v03\source.part02c",
+            ".github\saphaea-v03\source.part02d",
             ".github\saphaea-v03\source.partA",
             ".github\saphaea-v03\source.partB",
-            ".github\saphaea-v03\source.partC"
+            ".github\saphaea-v03\source.partC0",
+            ".github\saphaea-v03\source.partC1",
+            ".github\saphaea-v03\source.partC2",
+            ".github\saphaea-v03\source.partC3",
+            ".github\saphaea-v03\source.partC4",
+            ".github\saphaea-v03\source.partC5",
+            ".github\saphaea-v03\source.partC6"
           )
           $b64 = ($parts | ForEach-Object { (Get-Content $_ -Raw).Trim() }) -join ""
           if ($b64.Length -ne 61144) {
@@ -39,6 +48,10 @@ jobs:
           }
           $zip = "$env:RUNNER_TEMP\saphaea-v03.zip"
           [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($zipHash -ne "be02942ac61c5981a4aee215c2aa037eeedbd994c8f7f54801d026d2caf8e80e") {
+            throw "Saphaea v0.3 source SHA-256 mismatch: $zipHash"
+          }
           $dest = "$env:GITHUB_WORKSPACE\saphaea-inspector-v03"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           tar -xf $zip -C $dest
