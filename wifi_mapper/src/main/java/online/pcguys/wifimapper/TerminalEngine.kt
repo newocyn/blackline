@@ -71,6 +71,10 @@ class TerminalEngine(private val context: Context) {
                 if (args.isEmpty()) "Usage: tls <host> [port]"
                 else NetworkEngine.tlsSummary(args[0], args.getOrNull(1)?.toIntOrNull() ?: 443) ?: "No TLS details"
             }
+            "ssdp","upnp" -> {
+                val found = NetworkEngine.ssdpDiscover()
+                if (found.isEmpty()) "No SSDP/UPnP responses" else found.joinToString("\\n")
+            }
             "scan" -> {
                 val found = NetworkEngine.discoverSubnet(context, 180)
                 if (found.isEmpty()) "No responding devices found"
