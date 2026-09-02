@@ -9,6 +9,8 @@ import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.net.DatagramPacket
+import java.net.DatagramSocket
 import java.net.URL
 import java.security.cert.X509Certificate
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -263,6 +265,55 @@ object NetworkEngine {
 
     fun resolve(host: String): List<String> {
         return try { InetAddress.getAllByName(host).mapNotNull { it.hostAddress } } catch (_: Exception) { emptyList() }
+    }
+
+
+    fun ssdpDiscover(timeoutMs: Int = 2200): List<String> {
+        return try {
+            val socket = DatagramSocket()
+            socket.soTimeout = 500
+            val payload = (
+                "M-SEARCH * HTTP/1.1\r\n" +
+                "HOST: 239.255.255.250:1900\r\n" +
+                "MAN: \"ssdp:discover\"\r\n" +
+                "MX: 1\r\n" +
+                "ST: ssdp:all\r\n\r\n"
+            ).toByteArray()
+            val target = InetAddress.getByName("239.255.255.250")
+            socket.send(DatagramPacket(payload, payload.size, target, 1900))
+            val end = System.currentTimeMillis() + timeoutMs
+            val found = linkedSetOf<String>()
+            while (System.currentTimeMillis() < end) {
+                try {
+                    val buf = ByteArray(4096)
+                    val packet = DatagramPacket(buf, buf.size)
+                    socket.receive(packet)
+                    val body = String(packet.data, 0, packet.length, Charsets.UTF_8)
+                    val server = body.lines().firstOrNull { it.startsWith("SERVER:", true) }?.substringAfter(":")?.trim()
+                    val location = body.lines().firstOrNull { it.startsWith("LOCATION:", true) }?.substringAfter(":")?.trim()
+                    val st = body.lines().firstOrNull { it.startsWith("ST:", true) }?.substringAfter(":")?.trim()
+                    found.add(packet.address.hostAddress + " | " + (server ?: st ?: "UPnP device") + (location?.let { " | " + it } ?: ""))
+                } catch (_: java.net.SocketTimeoutException) {}
+            }
+            socket.close()
+            found.toList()
+        } catch (e: Exception) {
+            listOf("SSDP error: " + (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
+    fun riskSummary(ports: List<Int>): String {
+        val flags = mutableListOf<String>()
+        if (23 in ports) flags.add("Telnet exposed")
+        if (21 in ports || 20 in ports) flags.add("FTP exposed")
+        if (80 in ports && 443 !in ports) flags.add("HTTP-only management")
+        if (445 in ports) flags.add("SMB exposed")
+        if (3389 in ports) flags.add("RDP exposed")
+        if (5900 in ports) flags.add("VNC exposed")
+        if (6379 in ports) flags.add("Redis exposed")
+        if (27017 in ports) flags.add("MongoDB exposed")
+        if (2375 in ports) flags.add("Docker API exposed")
+        return if (flags.isEmpty()) "No obvious legacy/admin exposure in scanned ports" else flags.joinToString(" • ")
     }
 
     fun role(ports: List<Int>, gateway: Boolean): String = when {
