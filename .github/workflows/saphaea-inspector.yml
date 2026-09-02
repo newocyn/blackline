@@ -41,7 +41,7 @@ jobs:
           [IO.File]::WriteAllBytes($zip, [Convert]::FromBase64String($b64))
           $dest = "$env:GITHUB_WORKSPACE\saphaea-inspector-v03"
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
-          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          tar -xf $zip -C $dest
 
       - name: Restore
         shell: pwsh
