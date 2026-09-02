@@ -237,6 +237,9 @@ class EnterpriseActivity : AppCompatActivity() {
         addView(controls, top(10))
 
         addView(text("Tap any device for Deep Scan, HTTP, TLS and quick actions.", 12f, muted), top(10))
+        addView(secondary("Discover UPnP / SSDP devices").apply {
+            setOnClickListener { runSsdpDiscovery() }
+        }, top(8))
         discoveryList = LinearLayout(this@EnterpriseActivity).apply { orientation = LinearLayout.VERTICAL }
         addView(discoveryList!!, top(12))
         renderDevices()
@@ -441,6 +444,7 @@ class EnterpriseActivity : AppCompatActivity() {
                         addView(text(d.hostname ?: d.ip, 12f, muted), top(3))
                         if (d.hostname != null) addView(text(d.ip, 11f, muted), top(1))
                         if (d.openPorts.isNotEmpty()) addView(text("Seen: " + d.openPorts.joinToString(", "), 11f, muted), top(3))
+                        if (d.openPorts.isNotEmpty()) addView(text(NetworkEngine.riskSummary(d.openPorts), 11f, if (NetworkEngine.riskSummary(d.openPorts).startsWith("No obvious")) green else orange), top(3))
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     addView(text(d.latencyMs?.let { it.toString() + " ms" } ?: "online", 11f, green, true))
                 })
@@ -561,7 +565,7 @@ class EnterpriseActivity : AppCompatActivity() {
                 }
             }
             runOnUiThread {
-                status.text = if (deepCancel.get()) "Cancelled • " + findings.size + " open ports retained" else "Complete • " + findings.size + " open ports"
+                status.text = if (deepCancel.get()) "Cancelled • " + findings.size + " open ports retained" else "Complete • " + findings.size + " open ports • " + NetworkEngine.riskSummary(findings.map { it.port })
                 if (findings.isEmpty() && output.text.isBlank()) output.text = "No ports answered in this scan profile."
             }
         }
@@ -642,6 +646,15 @@ class EnterpriseActivity : AppCompatActivity() {
                 "\nNearby BSSIDs on channel: " + congestion +
                 "\n\nCapabilities: " + ap.capabilities
         )
+    }
+
+    private fun runSsdpDiscovery() {
+        simpleDialog("UPnP / SSDP discovery", "Listening for local discovery responses…")
+        io.execute {
+            val found = NetworkEngine.ssdpDiscover()
+            val result = if (found.isEmpty()) "No UPnP/SSDP responses received." else found.joinToString("\n\n")
+            runOnUiThread { simpleDialog("UPnP / SSDP discovery", result) }
+        }
     }
 
     private fun renderCapture() {
