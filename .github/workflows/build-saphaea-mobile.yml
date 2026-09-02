@@ -12,7 +12,7 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout Saphaea mobile source bundle
+      - name: Checkout Saphaea mobile source
         uses: actions/checkout@v4
         with:
           ref: saphaea-mobile-build
@@ -28,7 +28,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Rehydrate Saphaea Inspector Mobile source
+      - name: Rehydrate Saphaea Inspector Mobile base source
         shell: bash
         run: |
           cat \
@@ -41,26 +41,24 @@ jobs:
             .github/saphaea-mobile/source.part06 \
             .github/saphaea-mobile/source.part07 \
             > "$RUNNER_TEMP/saphaea-mobile.b64"
+
           payload_length="$(wc -c < "$RUNNER_TEMP/saphaea-mobile.b64" | tr -d ' ')"
           test "$payload_length" -eq 46228
           base64 --decode "$RUNNER_TEMP/saphaea-mobile.b64" > "$RUNNER_TEMP/saphaea-mobile.zip"
           echo "3f6ce73bcdb0b31b624afa33890c2d93f074bb57609032b32a4d37c885e56c43  $RUNNER_TEMP/saphaea-mobile.zip" | sha256sum -c -
           unzip -q "$RUNNER_TEMP/saphaea-mobile.zip" -d "$GITHUB_WORKSPACE"
+
           if ! grep -q 'include(":saphaea_mobile")' settings.gradle.kts; then
             echo 'include(":saphaea_mobile")' >> settings.gradle.kts
           fi
 
-      - name: Apply Android compatibility fixes
+      - name: Apply Saphaea Mobile v0.2 overlay
         shell: bash
         run: |
-          PROXY="saphaea_mobile/src/main/java/com/saphaea/inspector/mobile/ProxyEngine.kt"
-          sed -i '/import okhttp3\.\*/a import okhttp3.MediaType.Companion.toMediaType\nimport okhttp3.MediaType.Companion.toMediaTypeOrNull\nimport okhttp3.RequestBody.Companion.toRequestBody' "$PROXY"
-          UI="saphaea_mobile/src/main/java/com/saphaea/inspector/mobile/Ui.kt"
-          sed -i 's/        singleLine = true/        isSingleLine = true/' "$UI"
-          awk '{ print; if ($0 ~ /kotlinOptions \{ jvmTarget = "17" \}/) { print ""; print "    packaging {"; print "        resources {"; print "            excludes += setOf(\"META-INF/versions/9/OSGI-INF/MANIFEST.MF\")"; print "        }"; print "    }" } }' saphaea_mobile/build.gradle.kts > saphaea_mobile/build.gradle.kts.tmp
-          mv saphaea_mobile/build.gradle.kts.tmp saphaea_mobile/build.gradle.kts
+          echo "5cf26fbfc476665552eb1e387201bb8af347d9d4f5d6bf1cfe313a467380a28b  .github/saphaea-mobile/v02-overlay.tar.xz" | sha256sum -c -
+          tar -xJf .github/saphaea-mobile/v02-overlay.tar.xz -C saphaea_mobile
 
-      - name: Build Saphaea Inspector Mobile debug APK
+      - name: Build Saphaea Inspector Mobile v0.2 APK
         run: gradle :saphaea_mobile:assembleDebug --stacktrace
 
       - name: Package APK
@@ -68,14 +66,14 @@ jobs:
         run: |
           APK="$(find saphaea_mobile/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)"
           test -n "$APK"
-          cp "$APK" Saphaea-Inspector-Mobile-0.1-alpha.apk
-          sha256sum Saphaea-Inspector-Mobile-0.1-alpha.apk > Saphaea-Inspector-Mobile-0.1-alpha.sha256
+          cp "$APK" Saphaea-Inspector-Mobile-0.2-alpha.apk
+          sha256sum Saphaea-Inspector-Mobile-0.2-alpha.apk > Saphaea-Inspector-Mobile-0.2-alpha.sha256
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Saphaea-Inspector-Mobile-0.1-alpha
+          name: Saphaea-Inspector-Mobile-0.2-alpha
           path: |
-            Saphaea-Inspector-Mobile-0.1-alpha.apk
-            Saphaea-Inspector-Mobile-0.1-alpha.sha256
+            Saphaea-Inspector-Mobile-0.2-alpha.apk
+            Saphaea-Inspector-Mobile-0.2-alpha.sha256
           if-no-files-found: error
