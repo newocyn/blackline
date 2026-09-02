@@ -63,6 +63,26 @@ jobs:
           UI="saphaea_mobile/src/main/java/com/saphaea/inspector/mobile/Ui.kt"
           sed -i 's/        singleLine = true/        isSingleLine = true/' "$UI"
 
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("saphaea_mobile/build.gradle.kts")
+          s = p.read_text()
+          marker = '    kotlinOptions { jvmTarget = "17" }\n}'
+          replacement = '''    kotlinOptions { jvmTarget = "17" }
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            )
+        }
+    }
+}'''
+          if marker not in s:
+              raise SystemExit("Android packaging patch marker not found")
+          p.write_text(s.replace(marker, replacement))
+          PY
+
       - name: Build Saphaea Inspector Mobile debug APK
         run: gradle :saphaea_mobile:assembleDebug --stacktrace
 
