@@ -1,11 +1,10 @@
-name: Build PCG WiFi Mapper APK
+name: Build PCG Network Tool APK
 
 on:
   push:
     branches: [ "main" ]
     paths:
       - "wifi_mapper/**"
-      - "settings.gradle.kts"
       - ".github/workflows/build-wifi-mapper.yml"
   workflow_dispatch:
 
@@ -21,12 +20,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build WiFi Mapper debug APK
+      - name: Reconstruct PCG Network Tool source
+        run: |
+          cat wifi_mapper/srcgen/mainactivity.*.gz.b64part | base64 -d | gunzip > wifi_mapper/src/main/java/online/pcguys/wifimapper/MainActivity.kt
+      - name: Build Network Tool debug APK
         run: gradle :wifi_mapper:assembleDebug
       - name: Rename APK
-        run: cp wifi_mapper/build/outputs/apk/debug/wifi_mapper-debug.apk PCG-WiFi-Mapper-v1.0.apk
+        run: cp wifi_mapper/build/outputs/apk/debug/wifi_mapper-debug.apk PCG-Network-Tool-v1.0.0.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: PCG-WiFi-Mapper-APK
-          path: PCG-WiFi-Mapper-v1.0.apk
+          name: PCG-Network-Tool-APK
+          path: PCG-Network-Tool-v1.0.0.apk
           if-no-files-found: error
