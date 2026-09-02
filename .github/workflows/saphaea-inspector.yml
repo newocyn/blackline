@@ -29,6 +29,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\saphaea-inspector" | Out-Null
           Expand-Archive -Path "$env:RUNNER_TEMP\saphaea.zip" -DestinationPath "$env:GITHUB_WORKSPACE\saphaea-inspector" -Force
           (Get-Content "$env:GITHUB_WORKSPACE\saphaea-inspector\MainWindow.xaml" -Raw) -replace ' CharacterSpacing="[^"]*"', '' | Set-Content "$env:GITHUB_WORKSPACE\saphaea-inspector\MainWindow.xaml"
+          $proxyFile = "$env:GITHUB_WORKSPACE\saphaea-inspector\Services\ProxyService.cs"
+          $proxySource = Get-Content $proxyFile -Raw
+          Set-Content $proxyFile ("using System.IO;`r`nusing System.Net.Http;`r`n" + $proxySource)
 
       - name: Restore
         shell: pwsh
