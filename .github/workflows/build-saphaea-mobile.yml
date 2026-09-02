@@ -54,6 +54,15 @@ jobs:
             echo 'include(":saphaea_mobile")' >> settings.gradle.kts
           fi
 
+      - name: Apply Android compatibility fixes
+        shell: bash
+        run: |
+          PROXY="saphaea_mobile/src/main/java/com/saphaea/inspector/mobile/ProxyEngine.kt"
+          sed -i '/import okhttp3\.\*/a import okhttp3.MediaType.Companion.toMediaType\nimport okhttp3.MediaType.Companion.toMediaTypeOrNull\nimport okhttp3.RequestBody.Companion.toRequestBody' "$PROXY"
+
+          UI="saphaea_mobile/src/main/java/com/saphaea/inspector/mobile/Ui.kt"
+          sed -i 's/        singleLine = true/        isSingleLine = true/' "$UI"
+
       - name: Build Saphaea Inspector Mobile debug APK
         run: gradle :saphaea_mobile:assembleDebug --stacktrace
 
