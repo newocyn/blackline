@@ -1,0 +1,75 @@
+name: Build Saphaea Inspector Mobile APK
+
+on:
+  push:
+    branches: [ "saphaea-mobile-build" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Saphaea mobile source bundle
+        uses: actions/checkout@v4
+        with:
+          ref: saphaea-mobile-build
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Rehydrate Saphaea Inspector Mobile source
+        shell: bash
+        run: |
+          cat \
+            .github/saphaea-mobile/source.part00 \
+            .github/saphaea-mobile/source.part01 \
+            .github/saphaea-mobile/source.part02 \
+            .github/saphaea-mobile/source.part03 \
+            .github/saphaea-mobile/source.part04 \
+            .github/saphaea-mobile/source.part05 \
+            .github/saphaea-mobile/source.part06 \
+            .github/saphaea-mobile/source.part07 \
+            > "$RUNNER_TEMP/saphaea-mobile.b64"
+
+          payload_length="$(wc -c < "$RUNNER_TEMP/saphaea-mobile.b64" | tr -d ' ')"
+          test "$payload_length" -eq 46228
+
+          base64 --decode "$RUNNER_TEMP/saphaea-mobile.b64" > "$RUNNER_TEMP/saphaea-mobile.zip"
+          echo "3f6ce73bcdb0b31b624afa33890c2d93f074bb57609032b32a4d37c885e56c43  $RUNNER_TEMP/saphaea-mobile.zip" | sha256sum -c -
+
+          unzip -q "$RUNNER_TEMP/saphaea-mobile.zip" -d "$GITHUB_WORKSPACE"
+
+          if ! grep -q 'include(":saphaea_mobile")' settings.gradle.kts; then
+            echo 'include(":saphaea_mobile")' >> settings.gradle.kts
+          fi
+
+      - name: Build Saphaea Inspector Mobile debug APK
+        run: gradle :saphaea_mobile:assembleDebug --stacktrace
+
+      - name: Package APK
+        shell: bash
+        run: |
+          APK="$(find saphaea_mobile/build/outputs/apk/debug -name '*.apk' -type f | head -n 1)"
+          test -n "$APK"
+          cp "$APK" Saphaea-Inspector-Mobile-0.1-alpha.apk
+          sha256sum Saphaea-Inspector-Mobile-0.1-alpha.apk > Saphaea-Inspector-Mobile-0.1-alpha.sha256
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saphaea-Inspector-Mobile-0.1-alpha
+          path: |
+            Saphaea-Inspector-Mobile-0.1-alpha.apk
+            Saphaea-Inspector-Mobile-0.1-alpha.sha256
+          if-no-files-found: error
